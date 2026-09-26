@@ -1,0 +1,14 @@
+<!-- Example snippet for cfg["include"]: a 6 cm cube and a cylinder on the table.  <default>, <asset> and <worldbody> children are merged into the scene.
+     Positions are in the robot base frame (z = 0 is the base mount plane, the table top is at table.z, default -2 mm). -->
+<mujoco>
+  <worldbody>
+    <body name="cube" pos="0.10 -0.55 0.03">
+      <freejoint name="cube_free"/>
+      <geom type="box" size="0.03 0.03 0.03" mass="0.08" rgba="0.8 0.2 0.2 1" friction="0.8 0.005 0.0005"/>
+    </body>
+    <body name="can" pos="-0.15 -0.60 0.04">
+      <freejoint name="can_free"/>
+      <geom type="cylinder" size="0.03 0.04" mass="0.1" rgba="0.2 0.4 0.8 1" friction="0.8 0.005 0.0005"/>
+    </body>
+  </worldbody>
+</mujoco>

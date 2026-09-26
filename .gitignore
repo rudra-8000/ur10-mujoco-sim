@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+ur10sim/out/
+MUJOCO_LOG.TXT
+datasets/
+*.egg-info/

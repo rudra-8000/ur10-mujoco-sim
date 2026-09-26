@@ -1,0 +1,9 @@
+mujoco>=2.3.7
+numpy
+scipy
+pyyaml
+pillow
+pandas       # dataset replays only
+pyarrow      # dataset replays only
+matplotlib   # calibration / registration helpers only
+# system: ffmpeg (dataset frames, videos), an OpenGL backend (EGL / osmesa / glfw)

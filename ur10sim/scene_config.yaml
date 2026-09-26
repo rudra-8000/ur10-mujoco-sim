@@ -1,0 +1,88 @@
+# Scene config for the MuJoCo UR10 workspace (ur10sim).  Edit, save, and re-run:
+#     python ur10sim/scene_view.py            # render once  -> ur10sim/out/*.png
+#     python ur10sim/scene_view.py --watch    # re-render whenever this file changes (add --window for a live X11 window)
+#
+# Units: metres and degrees.  Robot base frame: origin at the robot base mount plane, +z up, the arm reaches toward -x at home.
+# A value of `null` means "unused".  Everything here is a first guess -- tune it against the real camera frames
+# (robot.source: dataset + render.compare: true shows sim | real | blend side by side).
+
+table:                         # the wooden board: 125 cm (x) x 115 cm (y), long edge 1-2 cm from the base mount edge (user)
+  z: -0.002                    # table TOP surface height in the base frame (user: about -2 mm)
+  center_xy: [0.005, -0.685]   # near long edge at y = -0.11 (base mount radius 0.095 + 1.5 cm), far edge at y = -1.26; x centred on the robot (fit: 0.005)
+  size_xy: [1.25, 1.15]        # full extents (x, y)
+  rgba: [0.83, 0.66, 0.45, 1.0]
+
+robot:
+  source: home                 # home | joints | dataset   (dataset needs the LeRobot data, see README; configs/lab_dataset_frame.yaml uses it)
+  joints_deg: [0, -90, 90, -90, -90, 90]   # used when source: joints (home = the same numbers)
+  gripper_frac: 0.0            # recorded gripper value (0 open .. 1 closed), used when source: joints/home
+  dataset:                     # used when source: dataset -> arm joints + gripper come from this frame, real camera frames are used for compare
+    name: circular_hole_v21_clean          # folder under $UR10SIM_DATASETS (default: <repo>/datasets)
+    episode: 0
+    frame: 400
+
+holes:
+  fixed: true                  # false: hole blocks are free bodies on the table (they are 50 g)
+  # From the datasets: at release/insertion the TCP is at x = 0.007..0.012, y = -0.87 (std 5 mm) in BOTH the circular- and square-hole
+  # datasets => one hole block per scene, always at about (0.01, -0.87).  Block yaw unknown (0 = block sides parallel to the base axes).
+  circle:
+    enabled: true
+    x: 0.007
+    y: -0.872
+    yaw_deg: 0
+  square:
+    enabled: false
+    x: 0.010
+    y: -0.870
+    yaw_deg: 0
+
+peg:                           # 100 g, 200 mm long, square end 41.5 mm, round end D50
+  mode: table                  # table: lying on the table (settled by physics) | gripper: held, pose given relative to the gripper frame
+  # From the datasets: the grasp TCP is at y = -0.656 (std 8 mm) and x = -0.055..0.103 (mean 0.03; episode 0 = 0.076, y -0.654), tool z ~ 6 mm
+  # above the table.  The peg axis is parallel to the gripper hinge axis, i.e. to the base x axis (the real image shows it horizontal).
+  x: 0.01                      # FIXED start pose (user); x = centre of the grasp positions in the datasets (grasps cluster at x = +0.09 / -0.07, i.e. +-0.08 from 0.01), y = median grasp y
+  y: -0.662
+  yaw_deg: 0                   # 0 or 180 (user).  square task grasps the ROUND end, circle task the SQUARE end: sqr: grasp x>0 <-> yaw 0; circ: grasp x>0 <-> yaw 180.  Direction of the peg axis (square end -> round end) in the base xy plane, 0 = +x, 90 = +y (180 = flipped end for end)
+  gripper_offset:              # only for mode: gripper; peg centroid pose in the gripper frame (x = fingers, y = hinge axis, z = jaw direction)
+    xyz: [0.0803, 0.060, 0.0]
+    rpy_deg: [-90, 0, 0]       # default: peg axis along the gripper +y (hinge axis), round end toward +y
+
+cameras:
+  top:                         # D415 "cam_high"
+    # FITTED (ur10sim/fit_top_camera.py) to a real frame: hole block at pixel (331,192) [34 px wide], far board edge at image row ~15,
+    # left/right board edges at row 180 -> width 1.276 m (true 1.25).  The camera is ABOVE the board, 1.07 m over the table (user's 107 cm
+    # hypothesis: cost 4.8 vs 32+ for the 78 cm one, which needs a 34-54 deg tilt and a position 0.3-0.5 m off the board), tilted 2.9 deg
+    # toward the robot, mounted upside-down (image-up = -y, image-right = -x, base at the image bottom).  FOV 65 deg fits best (nominal 69).
+    pos: [0.0322, -0.8351, 1.068]  # base frame
+    look_at: [0.0331, -0.7815, -0.002]
+    up_hint: [-0.0379, -0.998, -0.05]   # direction (base frame) of the image top
+    rpy_deg: null              # alternative to look_at: [roll, pitch, yaw] of the camera frame in the base frame (MuJoCo camera looks along its -z)
+    yaw_deg: 1.5               # extra rotation of the camera orientation about the world +z axis (anticlockwise seen from above), applied after look_at/up_hint
+    roll_deg: -2.5             # extra roll about the viewing axis (after yaw); fitted with yaw 1.5 by edge-map correlation (yaw and roll trade off: ridge roll ~ -yaw-1)
+    fov_h_deg: 65              # horizontal field of view
+  wrist:                       # D435i "cam_right_wrist", rigidly on the gripper
+    mount:                          # CAD camera mount (try3 CAMERA MOUNT) carrying the D435i on its two M3 holes; replaces pos/look_at/up_hint/tilt below
+      enabled: true
+      version: V6_REINFORCED        # V2 | V6_REINFORCED (same outer geometry, V6 adds ribs)
+      angle_deg: -15                # the mount rotates about its pivot bolt (axis = jaw direction z of G): extra angle on top of the CAD pose
+                                    # (CAD pose: lens axis 37.9 deg off the finger axis x_g, toward the gripper centre line).  + turns the lens further toward the centre line
+      rgb_toward_z: 1               # the D435i can only be screwed on two ways (2 holes, 45 mm): +1 = RGB-lens end toward +z of G (jaw side, near the tips), -1 = flipped
+      lens: rgb                     # which lens the sim camera 'wrist' sits at: rgb | ir_left | emitter | ir_right   (cam_right_wrist = the RGB stream)
+    body_yaw_deg: 0                 # rotate the WHOLE camera body (position + view) by this angle about the gripper tool axis (x of G); user: 180
+    pos: [-0.020, -0.085, -0.036]   # BEFORE body_yaw_deg, in the GRIPPER frame G: x = fingers, y = hinge axis, z = jaw direction (origin on the cam axis)
+    look_at: [0.090, 0.0, 0.0]      # point in G the camera looks at (default: the pad centre)
+    up_hint: [0, -1, 0]             # direction in G that points to the TOP of the wrist image
+    rpy_deg: null
+    tilt_deg: 0                # extra pitch about the camera x axis; positive = look further toward the image bottom
+    roll_deg: 0
+    fov_h_deg: 69
+  overview:                    # debug camera (not a real camera): oblique view of robot + table
+    pos: [1.6, -1.9, 1.4]
+    look_at: [0.0, -0.5, 0.3]
+
+render:
+  width: 640
+  height: 480
+  compare: true                # with robot.source: dataset also write compare.png = sim | real | 50% blend
+  settle_steps: 2500           # physics steps to let the peg / gripper settle before rendering
+  out_dir: out

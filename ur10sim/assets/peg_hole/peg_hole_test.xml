@@ -1,0 +1,71 @@
+<mujoco model="peg_hole_test"><include file="peg_hole_assets.xml"/>
+  <option timestep="0.001" integrator="implicitfast"/>
+  <worldbody><geom name="table" type="plane" size="1 1 0.1" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4"/>
+    <body name="hole_square" pos="-0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_square_vis" contype="0" conaffinity="0" rgba="0.2 0.2 0.22 1"/>
+      <geom type="box" pos="0 0 -0.04250" size="0.03500 0.03500 0.00150" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="box" pos="0.02917 0 -0.02050" size="0.00583 0.03500 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="box" pos="-0.02917 0 -0.02050" size="0.00583 0.03500 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="box" pos="0 0.02917 -0.02050" size="0.02335 0.00583 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="box" pos="0 -0.02917 -0.02050" size="0.02335 0.00583 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+    </body>
+    <body name="hole_circle" pos="0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_circle_vis" contype="0" conaffinity="0" rgba="0.2 0.2 0.22 1"/>
+      <geom type="box" pos="0 0 -0.04250" size="0.03500 0.03500 0.00150" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq0" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq1" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq2" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq3" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq4" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq5" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq6" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq7" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq8" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq9" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq10" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq11" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq12" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq13" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq14" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq15" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq16" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq17" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq18" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq19" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq20" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq21" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq22" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq23" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq24" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq25" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq26" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq27" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq28" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq29" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq30" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq31" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq32" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq33" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq34" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq35" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq36" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq37" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq38" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq39" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq40" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq41" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq42" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq43" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq44" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq45" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq46" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+      <geom type="mesh" mesh="cq47" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
+    </body>
+    <body name="peg" pos="0 0 0.3">
+      <freejoint name="peg_free"/>
+      <inertial pos="0 0 0" mass="0.1" diaginertia="2.195e-04 2.195e-04 5.281e-05"/>
+      <geom type="mesh" mesh="peg_sq" contype="0" conaffinity="0" rgba="0.9 0.9 0.9 1"/>
+      <geom type="mesh" mesh="peg_circ" contype="0" conaffinity="0" rgba="0.15 0.15 0.15 1"/>
+      <!-- collision = primitives (mesh-mesh contacts were unstable at the rim); 8 mm square->round loft has no collision geom -->
+      <geom name="peg_sq_col" type="box" pos="0 0 -0.05575" size="0.02075 0.02075 0.0475" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0 0 0 0"/>
+      <geom name="peg_circ_col" type="cylinder" pos="0 0 0.04834" size="0.025 0.04841" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0 0 0 0"/>
+    </body>
+  </worldbody></mujoco>

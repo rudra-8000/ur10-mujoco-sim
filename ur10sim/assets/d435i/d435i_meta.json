@@ -1,0 +1,90 @@
+{
+ "source": "MuJoCo Menagerie realsense_d435i (Apache-2.0)",
+ "parts": [
+  {
+   "mesh": "d435i_0",
+   "material": "IR_Lens",
+   "tris": 200,
+   "src_tris": 200
+  },
+  {
+   "mesh": "d435i_1",
+   "material": "IR_Emitter_Lens",
+   "tris": 1253,
+   "src_tris": 1273
+  },
+  {
+   "mesh": "d435i_2",
+   "material": "IR_Rim",
+   "tris": 2845,
+   "src_tris": 3492
+  },
+  {
+   "mesh": "d435i_3",
+   "material": "IR_Lens",
+   "tris": 296,
+   "src_tris": 316
+  },
+  {
+   "mesh": "d435i_4",
+   "material": "Cameras_Gray",
+   "tris": 12993,
+   "src_tris": 55527
+  },
+  {
+   "mesh": "d435i_5",
+   "material": "Black_Acrylic",
+   "tris": 2389,
+   "src_tris": 4940
+  },
+  {
+   "mesh": "d435i_6",
+   "material": "Black_Acrylic",
+   "tris": 3898,
+   "src_tris": 7250
+  },
+  {
+   "mesh": "d435i_7",
+   "material": "RGB_Pupil",
+   "tris": 496,
+   "src_tris": 712
+  },
+  {
+   "mesh": "d435i_8",
+   "material": "Metal_Casing",
+   "tris": 25093,
+   "src_tris": 134753
+  }
+ ],
+ "lenses": {
+  "ir_left": [
+   -0.0325,
+   0,
+   -0.0012
+  ],
+  "emitter": [
+   -0.0115,
+   0,
+   -0.0039
+  ],
+  "ir_right": [
+   0.0175,
+   0,
+   -0.0012
+  ],
+  "rgb": [
+   0.0325,
+   0,
+   -0.0036
+  ]
+ },
+ "size_m": [
+  0.09,
+  0.025,
+  0.025
+ ],
+ "rgb_fov_deg": [
+  69,
+  42
+ ]
+}
