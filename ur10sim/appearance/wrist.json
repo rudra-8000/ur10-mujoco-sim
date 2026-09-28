@@ -1,0 +1,23 @@
+{
+"blur_sigma": 1.5,
+"noise_std": 0.3,
+"lut_x": [
+0,
+255
+],
+"lut_y": [
+[
+0,
+255
+],
+[
+0,
+255
+],
+[
+0,
+255
+]
+],
+"note": "identity colour map; blur/noise by eye vs real frames (colour: cameras.<name>.color_gain)"
+}

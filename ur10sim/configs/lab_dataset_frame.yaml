@@ -10,7 +10,8 @@ table:                         # the wooden board: 125 cm (x) x 115 cm (y), long
   z: -0.002                    # table TOP surface height in the base frame (user: about -2 mm)
   center_xy: [0.005, -0.685]   # near long edge at y = -0.11 (base mount radius 0.095 + 1.5 cm), far edge at y = -1.26; x centred on the robot (fit: 0.005)
   size_xy: [1.25, 1.15]        # full extents (x, y)
-  rgba: [0.83, 0.66, 0.45, 1.0]
+  texture: assets/table/wood.png   # procedural plywood texture (make_wood_texture.py); remove the line for a flat colour
+  rgba: [1.0, 1.0, 1.0, 1.0]   # matched to the pixel values of the real cameras (which render the plywood grey-beige), not to the eye
 
 robot:
   source: dataset              # home | joints | dataset
@@ -57,14 +58,15 @@ cameras:
     look_at: [0.0331, -0.7815, -0.002]
     up_hint: [-0.0379, -0.998, -0.05]   # direction (base frame) of the image top
     rpy_deg: null              # alternative to look_at: [roll, pitch, yaw] of the camera frame in the base frame (MuJoCo camera looks along its -z)
-    yaw_deg: 1.5               # extra rotation of the camera orientation about the world +z axis (anticlockwise seen from above), applied after look_at/up_hint
-    roll_deg: -2.5             # extra roll about the viewing axis (after yaw); fitted with yaw 1.5 by edge-map correlation (yaw and roll trade off: ridge roll ~ -yaw-1)
+    appearance: appearance/top.json   # blur / colour map / noise fitted to the real camera (calibrate_appearance.py)
+    yaw_deg: -1.5              # extra rotation of the camera orientation about the world +z axis (anticlockwise seen from above), applied after look_at/up_hint
+    roll_deg: 0.5              # extra roll about the viewing axis (after yaw); edge-map correlation fit for this yaw (yaw and roll trade off: best roll ~ -yaw-1). Sign of yaw fixed 2026-09-26 (user: anticlockwise)
     fov_h_deg: 65              # horizontal field of view
   wrist:                       # D435i "cam_right_wrist", rigidly on the gripper
     mount:                          # CAD camera mount (try3 CAMERA MOUNT) carrying the D435i on its two M3 holes; replaces pos/look_at/up_hint/tilt below
       enabled: true
       version: V6_REINFORCED        # V2 | V6_REINFORCED (same outer geometry, V6 adds ribs)
-      angle_deg: -15                # the mount rotates about its pivot bolt (axis = jaw direction z of G): extra angle on top of the CAD pose
+      angle_deg: -14                # the mount rotates about its pivot bolt (axis = jaw direction z of G): extra angle on top of the CAD pose
                                     # (CAD pose: lens axis 37.9 deg off the finger axis x_g, toward the gripper centre line).  + turns the lens further toward the centre line
       rgb_toward_z: 1               # the D435i can only be screwed on two ways (2 holes, 45 mm): +1 = RGB-lens end toward +z of G (jaw side, near the tips), -1 = flipped
       lens: rgb                     # which lens the sim camera 'wrist' sits at: rgb | ir_left | emitter | ir_right   (cam_right_wrist = the RGB stream)
@@ -76,6 +78,8 @@ cameras:
     tilt_deg: 0                # extra pitch about the camera x axis; positive = look further toward the image bottom
     roll_deg: 0
     fov_h_deg: 69
+    color_gain: [0.83, 0.82, 0.79]   # wrist camera exposure (board (125,124,119) in the real frames)
+    appearance: appearance/wrist.json
   overview:                    # debug camera (not a real camera): oblique view of robot + table
     pos: [1.6, -1.9, 1.4]
     look_at: [0.0, -0.5, 0.3]

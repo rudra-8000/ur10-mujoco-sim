@@ -37,6 +37,26 @@ def load_stl(path):
     return np.frombuffer(b, dtype=dt, count=n, offset=84)["v"].reshape(-1, 3, 3).astype(float)
 
 
+def slab(tris, thick):
+    """closed thin solid from a flat, upward-facing triangle patch (MuJoCo refuses zero-volume meshes): top = patch, bottom = copy lowered by
+    `thick`, side walls along the boundary edges (edges used by exactly one triangle)."""
+    from collections import Counter
+    key = lambda v: tuple(np.round(v, 7))
+    cnt = Counter()
+    for t in tris:
+        for i in range(3):
+            cnt[frozenset((key(t[i]), key(t[(i + 1) % 3])))] += 1
+    out = [t for t in tris]
+    down = np.array([0, 0, -thick])
+    out += [t[::-1] + down for t in tris]
+    for t in tris:
+        for i in range(3):
+            a, b = t[i], t[(i + 1) % 3]
+            if cnt[frozenset((key(a), key(b)))] == 1:
+                out += [np.array([a, b, b + down]), np.array([a, b + down, a + down])]
+    return np.array(out)
+
+
 def write_stl(path, tris):
     tris = np.asarray(tris, np.float32)
     n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]); n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-20
@@ -71,8 +91,11 @@ def main():
     circ = load_stl(CAD / "Peg_v1 - Circle Hole^Assem1-1.STL"); sq = load_stl(CAD / "Peg_v1 - Square Hole^Assem1-1.STL")
     circ_h = np.stack([circ[..., 0] - C_XY, -(circ[..., 1] - C_XY), -(circ[..., 2] - 165.04)], -1) * 1e-3   # rot 180 deg about x
     sq_h = np.stack([sq[..., 0] - C_XY, sq[..., 1] - C_XY, sq[..., 2] - 45.04], -1) * 1e-3
-    write_stl(MESH / "hole_circle_vis.stl", circ_h[:, [0, 2, 1]] if False else circ_h[:, ::-1] if False else circ_h)
-    write_stl(MESH / "hole_square_vis.stl", sq_h)
+    # the cavity floor (flat triangles at z = -41 mm) is its own mesh so it can get a different colour than the walls/body
+    for nm, h in (("circle", circ_h), ("square", sq_h)):
+        flat = np.ptp(h[:, :, 2], axis=1) < 1e-9
+        floor = flat & (np.abs(h[:, :, 2].mean(1) + 0.041) < 1e-6)
+        write_stl(MESH / f"hole_{nm}_vis.stl", h[~floor]); write_stl(MESH / f"hole_{nm}_floor.stl", slab(h[floor], 0.0003))
     # ---- collision primitives for the blocks (mm -> m)
     def sq_hole_bodies():
         g = []
@@ -104,7 +127,8 @@ def main():
     sqg = sq_hole_bodies()
     assets = ['<mujoco model="peg_hole_assets">', '  <compiler angle="radian" meshdir="meshes"/>', '  <asset>',
               '    <mesh name="peg_sq" file="peg_sq.stl"/>', '    <mesh name="peg_circ" file="peg_circ.stl"/>',
-              '    <mesh name="hole_circle_vis" file="hole_circle_vis.stl"/>', '    <mesh name="hole_square_vis" file="hole_square_vis.stl"/>']
+              '    <mesh name="hole_circle_vis" file="hole_circle_vis.stl"/>', '    <mesh name="hole_square_vis" file="hole_square_vis.stl"/>',
+              '    <mesh name="hole_circle_floor" file="hole_circle_floor.stl"/>', '    <mesh name="hole_square_floor" file="hole_square_floor.stl"/>']
     assets += ["    " + m for m in circ_meshes] + ['  </asset>', '</mujoco>']
     (OUT / "peg_hole_assets.xml").write_text("\n".join(assets))
     fr = 'friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4"'
@@ -117,11 +141,13 @@ def main():
       <geom name="peg_sq_col" type="box" pos="0 0 {-0.05575:.5f}" size="0.02075 0.02075 0.0475" {fr} rgba="0 0 0 0"/>
       <geom name="peg_circ_col" type="cylinder" pos="0 0 0.04834" size="0.025 0.04841" {fr} rgba="0 0 0 0"/>
     </body>"""
+    # real blocks: square-hole block white with a black cavity floor, circle-hole block black with a white floor (user, 2026-09-26)
+    BODY_FLOOR = {"hole_square": ("0.92 0.92 0.93 1", "0.04 0.04 0.04 1"), "hole_circle": ("0.05 0.05 0.05 1", "0.92 0.92 0.93 1")}
     def hole_body(name, pos, vis, prims):
         m_ = HOLE_MASS_KG
         inert = f'<inertial pos="0 0 -0.022" mass="{m_}" diaginertia="{m_/12*(0.07**2+0.044**2):.3e} {m_/12*(0.07**2+0.044**2):.3e} {m_/12*(0.07**2+0.07**2):.3e}"/>'
         fj = f'<freejoint name="{name}_free"/>' if HOLES_FREE else ""
-        return (f'<body name="{name}" pos="{pos}">{fj}{inert}<geom type="mesh" mesh="{vis}" contype="0" conaffinity="0" rgba="0.2 0.2 0.22 1"/>\n      '
+        return (f'<body name="{name}" pos="{pos}">{fj}{inert}<geom type="mesh" mesh="{vis}" contype="0" conaffinity="0" rgba="{BODY_FLOOR[name][0]}"/><geom type="mesh" mesh="{vis.replace('_vis', '_floor')}" mass="0" contype="0" conaffinity="0" rgba="{BODY_FLOOR[name][1]}"/>\n      '
                 + "\n      ".join(p.replace("/>", f' {fr} rgba="0.2 0.2 0.22 0"/>') for p in prims) + "\n    </body>")
     test = f"""<mujoco model="peg_hole_test"><include file="peg_hole_assets.xml"/>
   <option timestep="0.001" integrator="implicitfast"/>

@@ -28,7 +28,7 @@ calibration.conf from the controller and adjust the parameters below, or
 compute FK live via RTDE/URSim instead of this module.
 
 Sanity-check before trusting this at scale: run
-    python ur10sim/ur10_kinematics.py --selftest
+    python ur10_agent/conversion/ur10_kinematics.py --selftest
 and compare the printed home-pose position against a measurement (or a
 URSim/live-robot getActualTCPPose() reading) taken at the same joint pose
 ["0, -90, 90, -90, -90, 90" deg, the documented UR10 home in
@@ -200,7 +200,7 @@ def gripper_mm_to_frac(mm: float) -> float:
 
 # ── INVERSE KINEMATICS ───────────────────────────────────────────────────────
 # Analytic (closed-form) UR-family 6R IK, for the live EE-pose serving path
-# (examples/ur10/client_ur10.py):
+# (examples/ur10/client_ur10.py, ur10_agent/scripts/run_client_small.py):
 # the robot only ever accepts joint-space commands (servoJ, see CLAUDE.md
 # §5 — no Cartesian/servoL command is used anywhere in this stack), so a
 # policy trained on [x,y,z,rx,ry,rz,gripper_mm] needs this to produce

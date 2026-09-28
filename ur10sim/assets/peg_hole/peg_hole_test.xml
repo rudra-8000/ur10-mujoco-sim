@@ -1,14 +1,14 @@
 <mujoco model="peg_hole_test"><include file="peg_hole_assets.xml"/>
   <option timestep="0.001" integrator="implicitfast"/>
   <worldbody><geom name="table" type="plane" size="1 1 0.1" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4"/>
-    <body name="hole_square" pos="-0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_square_vis" contype="0" conaffinity="0" rgba="0.2 0.2 0.22 1"/>
+    <body name="hole_square" pos="-0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_square_vis" contype="0" conaffinity="0" rgba="0.92 0.92 0.93 1"/><geom type="mesh" mesh="hole_square_floor" mass="0" contype="0" conaffinity="0" rgba="0.04 0.04 0.04 1"/>
       <geom type="box" pos="0 0 -0.04250" size="0.03500 0.03500 0.00150" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="box" pos="0.02917 0 -0.02050" size="0.00583 0.03500 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="box" pos="-0.02917 0 -0.02050" size="0.00583 0.03500 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="box" pos="0 0.02917 -0.02050" size="0.02335 0.00583 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="box" pos="0 -0.02917 -0.02050" size="0.02335 0.00583 0.02050" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
     </body>
-    <body name="hole_circle" pos="0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_circle_vis" contype="0" conaffinity="0" rgba="0.2 0.2 0.22 1"/>
+    <body name="hole_circle" pos="0.15 0 0.041"><inertial pos="0 0 -0.022" mass="0.05" diaginertia="2.848e-05 2.848e-05 4.083e-05"/><geom type="mesh" mesh="hole_circle_vis" contype="0" conaffinity="0" rgba="0.05 0.05 0.05 1"/><geom type="mesh" mesh="hole_circle_floor" mass="0" contype="0" conaffinity="0" rgba="0.92 0.92 0.93 1"/>
       <geom type="box" pos="0 0 -0.04250" size="0.03500 0.03500 0.00150" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="mesh" mesh="cq0" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>
       <geom type="mesh" mesh="cq1" friction="0.8 0.005 0.0005" solref="0.004 1" solimp="0.95 0.99 0.001" condim="4" rgba="0.2 0.2 0.22 0"/>

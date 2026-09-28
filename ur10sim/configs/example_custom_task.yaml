@@ -1,15 +1,17 @@
 # Example of a scene for a different task: no peg, no hole blocks, two extra objects from examples/extra_objects.xml.
 # Copy this file, edit, run:  python ur10sim/scene_view.py --config ur10sim/configs/example_custom_task.yaml
 include: [../examples/extra_objects.xml]      # paths relative to this yaml
-table: {z: -0.002, center_xy: [0.005, -0.685], size_xy: [1.25, 1.15], rgba: [0.83, 0.66, 0.45, 1.0]}
+table: {z: -0.002, center_xy: [0.005, -0.685], size_xy: [1.25, 1.15], texture: assets/table/wood.png, rgba: [1.0, 1.0, 1.0, 1.0]}
 robot: {source: joints, joints_deg: [0, -90, 90, -90, -90, 90], gripper_frac: 0.0}
 holes: {fixed: true, circle: {enabled: false, x: 0.007, y: -0.872, yaw_deg: 0}, square: {enabled: false, x: 0.01, y: -0.87, yaw_deg: 0}}
 peg: {enabled: false, mode: table, x: 0.01, y: -0.662, yaw_deg: 0, gripper_offset: {xyz: [0.08, 0, 0], rpy_deg: [-90, 0, 0]}}
 cameras:
-  top: {pos: [0.0322, -0.8351, 1.068], look_at: [0.0331, -0.7815, -0.002], up_hint: [-0.0379, -0.998, -0.05], yaw_deg: 1.5, roll_deg: -2.5, fov_h_deg: 65}
+  top: {pos: [0.0322, -0.8351, 1.068], look_at: [0.0331, -0.7815, -0.002], up_hint: [-0.0379, -0.998, -0.05], yaw_deg: -1.5, roll_deg: 0.5, fov_h_deg: 65, appearance: appearance/top.json}
   wrist:
-    mount: {enabled: true, version: V6_REINFORCED, angle_deg: -15, rgb_toward_z: 1, lens: rgb}
+    mount: {enabled: true, version: V6_REINFORCED, angle_deg: -14, rgb_toward_z: 1, lens: rgb}
     body_yaw_deg: 0
     fov_h_deg: 69
+    color_gain: [0.83, 0.82, 0.79]
+    appearance: appearance/wrist.json
   overview: {pos: [1.6, -1.9, 1.4], look_at: [0.0, -0.5, 0.3]}
 render: {width: 640, height: 480, compare: false, settle_steps: 1500, out_dir: out}

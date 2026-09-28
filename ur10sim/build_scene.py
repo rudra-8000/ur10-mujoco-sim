@@ -47,6 +47,36 @@ def scene_key(cfg: dict) -> str:
     return json.dumps(c, sort_keys=True)
 
 
+
+_APPEAR = {}
+
+
+def apply_appearance(img: np.ndarray, path) -> np.ndarray:
+    """make a sim render look like the real camera: Gaussian blur (sigma px), per-channel colour map (piecewise-linear LUT fitted by quantile
+    matching) and sensor noise.  Spec json written by calibrate_appearance.py."""
+    p = Path(path) if Path(path).is_absolute() else HERE / path
+    if p not in _APPEAR:
+        _APPEAR[p] = json.loads(p.read_text())
+    a = _APPEAR[p]
+    x = img.astype(np.float32)
+    if a.get("gainmap"):                                                 # smooth per-pixel colour gain (lighting / vignetting of the real camera)
+        gp = Path(a["gainmap"]) if Path(a["gainmap"]).is_absolute() else p.parent / a["gainmap"]
+        if gp not in _APPEAR:
+            _APPEAR[gp] = np.load(gp).astype(np.float32)
+        gm = _APPEAR[gp]
+        from scipy.ndimage import zoom
+        x = x * zoom(gm, (x.shape[0] / gm.shape[0], x.shape[1] / gm.shape[1], 1), order=1)
+    if a.get("blur_sigma", 0) > 0:
+        from scipy.ndimage import gaussian_filter
+        x = gaussian_filter(x, sigma=(a["blur_sigma"], a["blur_sigma"], 0))
+    xs = np.asarray(a["lut_x"], np.float32)
+    out = np.empty_like(x)
+    for c in range(3):
+        out[..., c] = np.interp(x[..., c], xs, np.asarray(a["lut_y"][c], np.float32))
+    if a.get("noise_std", 0) > 0:
+        out += np.random.default_rng().normal(0, a["noise_std"], out.shape).astype(np.float32)
+    return np.clip(out, 0, 255).astype(np.uint8)
+
 # ───────────────────────────── math ─────────────────────────────
 def rot_x(a):
     c, s = np.cos(a), np.sin(a)
@@ -192,7 +222,7 @@ def build_xml(cfg: dict) -> str:
     vis = ET.SubElement(root, "visual")
     ET.SubElement(vis, "global", offwidth="1280", offheight="960")
     ET.SubElement(vis, "quality", shadowsize="4096")
-    ET.SubElement(vis, "headlight", ambient="0.35 0.35 0.35", diffuse="0.5 0.5 0.5", specular="0 0 0")
+    ET.SubElement(vis, "headlight", ambient="0.4 0.4 0.4", diffuse="0.2 0.2 0.2", specular="0 0 0")
     ET.SubElement(root, "statistic", extent="2.0", center="-0.4 -0.3 0.3")
     default = ET.SubElement(root, "default")
     asset = ET.SubElement(root, "asset")
@@ -217,10 +247,23 @@ def build_xml(cfg: dict) -> str:
 
     tz = cfg["table"]["z"]
     tc, ts = cfg["table"]["center_xy"], cfg["table"]["size_xy"]
-    ET.SubElement(wb, "light", pos="-0.3 -0.3 2.5", dir="0 0 -1", diffuse="0.8 0.8 0.8", specular="0.1 0.1 0.1", castshadow="true")
-    ET.SubElement(wb, "light", pos="1.0 -1.5 1.5", dir="-0.4 0.6 -0.8", diffuse="0.35 0.35 0.35", specular="0 0 0", castshadow="false")
+    # lighting: the real lab has several diffuse sources, so shadows are faint.  Strong ambient + several shadow-less fill lights + one very weak
+    # shadow caster (a shadow only removes that light's share of the light, the ambient/fill stay).
+    for i_, (lx, ly) in enumerate(((-1.2, 0.4), (1.2, 0.4), (-1.2, -1.6), (1.2, -1.6))):
+        ET.SubElement(wb, "light", name=f"fill{i_}", pos=f"{lx} {ly} 2.2", dir=f"{-lx * 0.4} {-(ly + 0.6) * 0.4} -1", diffuse="0.18 0.18 0.18", specular="0 0 0", castshadow="false")
+    ET.SubElement(wb, "light", name="key", pos="0.0 -0.6 2.6", dir="0 0 -1", diffuse="0.07 0.07 0.07", specular="0 0 0", castshadow="false")
+    if cfg.get("floor", {}).get("enabled", True):                  # lab floor far below the board (the real cameras see it beside/behind the board)
+        ET.SubElement(wb, "geom", name="floor", type="plane", pos=f"0 0 {cfg.get('floor', {}).get('z', -0.75)}", size="6 6 0.1", contype="0", conaffinity="0",
+                      rgba=fmt(cfg.get("floor", {}).get("rgba", [0.33, 0.35, 0.36, 1.0])))
+    tex = cfg["table"].get("texture")
+    mat = {}
+    if tex:                                                       # 2-D texture on the board (procedural plywood: make_wood_texture.py)
+        tp = Path(tex) if Path(tex).is_absolute() else HERE / tex
+        ET.SubElement(asset, "texture", name="table_tex", type="2d", file=str(tp))
+        ET.SubElement(asset, "material", name="table_mat", texture="table_tex", texrepeat="1 1", texuniform="false", specular="0", shininess="0")
+        mat = {"material": "table_mat"}
     ET.SubElement(wb, "geom", name="table", type="box", pos=fmt([tc[0], tc[1], tz - 0.02]), size=fmt([ts[0] / 2, ts[1] / 2, 0.02]),
-                  rgba=fmt(cfg["table"]["rgba"]), friction="0.8 0.005 0.0005", solref="0.004 1", condim="4")
+                  rgba=fmt(cfg["table"]["rgba"]), friction="0.8 0.005 0.0005", solref="0.004 1", condim="4", **mat)
     # UR10 (CB3) from the official Universal Robots description (assets/ur10, built by build_ur10.py)
     u = ET.parse(UR10 / "ur10.xml").getroot()
     for ch in list(u.find("default")):
@@ -256,30 +299,14 @@ def build_xml(cfg: dict) -> str:
         if not hc["enabled"]:
             continue
         b = copy.deepcopy(pbodies[bname])
-        for g_ in b.findall("geom"):
-            if g_.get("mesh", "").endswith("_vis"):
-                g_.set("rgba", "0.88 0.88 0.90 1")            # real hole blocks are light grey/white (dark cavity seen from above)
         b.set("pos", fmt([hc["x"], hc["y"], tz + 0.044]))
         b.set("quat", fmt(mat2quat(rot_z(np.radians(hc["yaw_deg"])))))
         if not cfg["holes"]["fixed"]:
             b.insert(0, ET.Element("freejoint", name=f"{bname}_free"))
         wb.append(b)
-    if cfg["peg"].get("enabled", True):
-        wb.append(copy.deepcopy(pbodies["peg"]))
-    # ---- your own objects: cfg["include"] = list of MJCF snippets ("<mujoco>" files with <asset> / <default> / <worldbody> children); merged in as they are.
-    #      Mesh / texture paths in the snippet are resolved relative to the snippet.  See README "Adding your own objects".
-    for inc in cfg.get("include") or []:
-        ip = Path(inc) if Path(inc).is_absolute() else (Path(cfg["_path"]).parent / inc)
-        ir = ET.parse(ip).getroot()
-        for sec, dst in (("default", default), ("asset", asset), ("worldbody", wb)):
-            for e in ir.findall(sec):
-                for ch in list(e):
-                    if sec == "asset" and ch.get("file"):
-                        ch.set("file", str((ip.parent / ch.get("file")).resolve()))
-                    dst.append(ch)
+    wb.append(copy.deepcopy(pbodies["peg"]))
     eq = g.find("equality")
-    if cfg["peg"].get("enabled", True):
-        ET.SubElement(eq, "weld", name="grasp_assist", body1="pincopen_base", body2="peg", active="false", solref="0.004 1")   # switched on by Scene.grasp_assist
+    ET.SubElement(eq, "weld", name="grasp_assist", body1="pincopen_base", body2="peg", active="false", solref="0.004 1", solimp="0.9 0.95 0.001")   # switched on by Scene.grasp_assist
     root.append(eq)
     root.append(g.find("actuator"))
     return ET.tostring(root, encoding="unicode")
@@ -301,9 +328,8 @@ class Scene:
         self.arm_adr = [m.jnt_qposadr[jid(f"joint_{i}")] for i in range(6)]
         self.arm_dof = [m.jnt_dofadr[jid(f"joint_{i}")] for i in range(6)]
         self.cam_adr = m.jnt_qposadr[jid("cam_joint")]
-        self.has_peg = jid("peg_free") >= 0
-        self.peg_adr = m.jnt_qposadr[jid("peg_free")] if self.has_peg else None
-        self.peg_dof = m.jnt_dofadr[jid("peg_free")] if self.has_peg else None
+        self.peg_adr = m.jnt_qposadr[jid("peg_free")]
+        self.peg_dof = m.jnt_dofadr[jid("peg_free")]
         self.bid = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n)
         self.cid = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_CAMERA, n)
         self.ctrl_range = m.actuator_ctrlrange[0].copy()
@@ -331,8 +357,6 @@ class Scene:
         target = float(np.clip(PC.cam_angle_for_frac(frac), self.ctrl_range[0], self.ctrl_range[1]))
         tz = cfg["table"]["z"]
         peg = cfg["peg"]
-        if not self.has_peg:
-            peg = {**peg, "mode": "none"}
         if peg["mode"] == "table":
             R = rot_z(np.radians(peg["yaw_deg"])) @ rot_y(np.pi / 2)
             d.qpos[self.peg_adr:self.peg_adr + 7] = [peg["x"], peg["y"], tz + 0.06, *mat2quat(R)]
@@ -360,8 +384,6 @@ class Scene:
     #    it is released when the gripper is commanded open.
     def grasp_assist(self, want_grip: bool) -> bool:
         mj, m, d = self.mj, self.model, self.data
-        if not self.has_peg:
-            return False
         if not hasattr(self, "_eq"):
             self._eq = mj.mj_name2id(m, mj.mjtObj.mjOBJ_EQUALITY, "grasp_assist")
             self._pads = {mj.mj_name2id(m, mj.mjtObj.mjOBJ_GEOM, n) for n in ("pad_L", "pad_R")}
@@ -370,6 +392,33 @@ class Scene:
         if held and not want_grip:
             d.eq_active[self._eq] = 0
             return False
+        if held:
+            # (1) once the peg is off the table, slide it along the tool axis until its axis passes through the TCP (the dataset TCP is where the
+            #     peg tip ends up over the hole; with the peg held at the pad centre the tip landed ~15 mm off).
+            pcfg = self.cfg.get("peg", {})
+            if getattr(self, "_x_target", None) is not None and d.xpos[self._pegb][2] > self.cfg["table"]["z"] + 0.055:
+                m.eq_solref[self._eq, 0] = float(pcfg.get("assist_solref", 0.004))
+                cur = m.eq_data[self._eq, 3]
+                dx = float(np.clip(self._x_target - cur, -1e-4, 1e-4))
+                m.eq_data[self._eq, 3] = cur + dx
+                self._pivot[0] += dx
+            # (2) a two-pad pinch does not fix rotation about the jaw axis z_g: the peg hangs from the pads under gravity.  Rotate it about z_g
+            #     (through the grasp point) so that its centre hangs straight below the grasp point, at most 2 rad/s.
+            if pcfg.get("hang_under_gravity", True):
+                Rg = d.xmat[self._gb].reshape(3, 3)
+                dn = Rg.T @ np.array([0.0, 0.0, -1.0])
+                un = np.linalg.norm(dn[:2])
+                pr = m.eq_data[self._eq, 3:6].copy()
+                v = pr[:2] - self._pivot
+                nv = np.linalg.norm(v)
+                if un > 0.2 and nv > 5e-3:
+                    u, c = dn[:2] / un, v / nv
+                    ang = float(np.clip(np.arctan2(c[0] * u[1] - c[1] * u[0], c @ u), -2e-3, 2e-3))
+                    cs, sn = np.cos(ang), np.sin(ang)
+                    m.eq_data[self._eq, 3:5] = self._pivot + np.array([cs * v[0] - sn * v[1], sn * v[0] + cs * v[1]])
+                    Rr = np.zeros(9); mj.mju_quat2Mat(Rr, m.eq_data[self._eq, 6:10].copy()); Rr = Rr.reshape(3, 3)
+                    Rz = np.array([[cs, -sn, 0], [sn, cs, 0], [0, 0, 1.0]])
+                    m.eq_data[self._eq, 6:10] = mat2quat(Rz @ Rr)
         if not held and want_grip:
             touching = set()
             for c in d.contact[:d.ncon]:
@@ -385,6 +434,9 @@ class Scene:
                 d.qpos[self.peg_adr:self.peg_adr + 7] = [*(pg + Rg @ pr), *mat2quat(Rg @ Rr)]; d.qvel[self.peg_dof:self.peg_dof + 6] = 0
                 m.eq_data[self._eq, :] = 0
                 m.eq_data[self._eq, 3:6] = pr; m.eq_data[self._eq, 6:10] = mat2quat(Rr); m.eq_data[self._eq, 10] = 1.0
+                import pincopen as PC
+                self._x_target = float(PC._META["mount"]["tcp_x_g_mm"]) * 1e-3 if self.cfg.get("peg", {}).get("axis_through_tcp", True) else None
+                self._pivot = np.array([pr[0], 0.0])
                 d.eq_active[self._eq] = 1
                 return True
         return held
@@ -407,15 +459,22 @@ class Scene:
             m.cam_quat[i] = mat2quat(R)
         self.mj.mj_forward(m, self.data)
 
-    def render(self, width: int, height: int) -> dict:
+    def render(self, width: int, height: int, cams=("top", "wrist", "overview")) -> dict:
         if self.renderer is None or self._size != (width, height):
             self._close_renderer()
             self.renderer = self.mj.Renderer(self.model, height, width)
             self._size = (width, height)
         out = {}
-        for name in ("top", "wrist", "overview"):
+        for name in cams:
             self.renderer.update_scene(self.data, camera=name)
-            out[name] = self.renderer.render().copy()
+            img = self.renderer.render().copy()
+            cc = self.cfg["cameras"].get(name, {})
+            gain = cc.get("color_gain")                                       # per-camera white balance / exposure (real cameras differ from each other)
+            if gain is not None:
+                img = np.clip(img.astype(np.float32) * np.asarray(gain, np.float32), 0, 255).astype(np.uint8)
+            if cc.get("appearance"):                                          # fitted blur + colour map + noise (calibrate_appearance.py)
+                img = apply_appearance(img, cc["appearance"])
+            out[name] = img
         return out
 
     def _close_renderer(self):
