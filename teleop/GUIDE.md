@@ -141,7 +141,19 @@ the leader and the follower robot's current pose. A consistently large gap
 across sessions (not just "the leader happened to be in a different pose
 when you plugged it in") points at stale calibration, not user error.
 
-### 1.5 Running
+### 1.5 If a joint seems reversed
+
+`joint_signs` in `config_gello.py` maps GELLO's raw encoder direction to the
+follower's joint convention, per joint. It's tuned for the reference GELLO
+build; a physically different assembly (motor mounted the other way on some
+joint, etc.) can need a different sign on exactly that joint. Don't guess --
+`check_gello_signs.py` isolates one joint at a time and asks a plain
+yes/no, then tells you exactly which sign(s) to flip:
+```bash
+python check_gello_signs.py --sim     # or --live
+```
+
+### 1.6 Running
 
 ```bash
 python teleop.py --method gello              # dry-run

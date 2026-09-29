@@ -382,15 +382,41 @@ class Scene:
     # -- grasp assist: the pad physics does not hold the lying peg (sim-to-real gap), so once both pads touch the peg while the gripper is
     #    commanded closed, the peg is squared up between the pads (axis along the hinge axis y_g, centred in z_g) and welded to the gripper;
     #    it is released when the gripper is commanded open.
+    EASE_STEPS = 15   # substeps to spread the grasp-lock position/orientation correction over, instead of one instant teleport
+
     def grasp_assist(self, want_grip: bool) -> bool:
         mj, m, d = self.mj, self.model, self.data
         if not hasattr(self, "_eq"):
             self._eq = mj.mj_name2id(m, mj.mjtObj.mjOBJ_EQUALITY, "grasp_assist")
             self._pads = {mj.mj_name2id(m, mj.mjtObj.mjOBJ_GEOM, n) for n in ("pad_L", "pad_R")}
             self._pegb = self.bid("peg"); self._gb = self.bid("pincopen_base")
+            self._pad_contype0 = {p: int(m.geom_contype[p]) for p in self._pads}
+            self._pad_conaffinity0 = {p: int(m.geom_conaffinity[p]) for p in self._pads}
+            self._ease_i = None
+            self._last_good_pose = None
+
+        def _restore_pad_contact():
+            for p in self._pads:
+                m.geom_contype[p] = self._pad_contype0[p]
+                m.geom_conaffinity[p] = self._pad_conaffinity0[p]
+
+        # Safety net: a NaN/Inf peg pose is unrecoverable once it happens (renders
+        # as the peg "disappearing"). Release + restore rather than propagate it.
+        cur_pose = d.qpos[self.peg_adr:self.peg_adr + 7].copy()
+        if not np.all(np.isfinite(cur_pose)):
+            d.eq_active[self._eq] = 0
+            _restore_pad_contact()
+            self._ease_i = None
+            if self._last_good_pose is not None:
+                d.qpos[self.peg_adr:self.peg_adr + 7] = self._last_good_pose
+                d.qvel[self.peg_dof:self.peg_dof + 6] = 0
+            return False
+        self._last_good_pose = cur_pose
+
         held = bool(d.eq_active[self._eq])
         if held and not want_grip:
             d.eq_active[self._eq] = 0
+            _restore_pad_contact()   # the weld isn't holding it anymore; pad contact can resume normally
             return False
         if held:
             # (1) once the peg is off the table, slide it along the tool axis until its axis passes through the TCP (the dataset TCP is where the
@@ -404,7 +430,15 @@ class Scene:
                 self._pivot[0] += dx
             # (2) a two-pad pinch does not fix rotation about the jaw axis z_g: the peg hangs from the pads under gravity.  Rotate it about z_g
             #     (through the grasp point) so that its centre hangs straight below the grasp point, at most 2 rad/s.
-            if pcfg.get("hang_under_gravity", True):
+            #     Only valid while the gripper itself is roughly still: "which way is down" is recomputed in the
+            #     gripper's OWN rotating frame every substep, so during fast arm rotation this chases a moving
+            #     target and injects real drift instead of a settling correction -- measured: ~112mm max drift
+            #     over a fast random-motion stress test with no gate, ~8mm with the correction fully disabled;
+            #     0.08 rad/s keeps it in the ~15-20mm range (functions during slow/settling motion, mostly
+            #     suppressed during fast teleop swings) -- see CHANGELOG.md 2026-09-29 for the measurements.
+            #     Not a full fix: some residual drift remains at any nonzero threshold. Tune via
+            #     peg.hang_max_gripper_radps in scene_config.yaml if this still isn't tight enough.
+            if pcfg.get("hang_under_gravity", True) and float(np.linalg.norm(d.cvel[self._gb][:3])) < pcfg.get("hang_max_gripper_radps", 0.08):
                 Rg = d.xmat[self._gb].reshape(3, 3)
                 dn = Rg.T @ np.array([0.0, 0.0, -1.0])
                 un = np.linalg.norm(dn[:2])
@@ -419,27 +453,57 @@ class Scene:
                     Rr = np.zeros(9); mj.mju_quat2Mat(Rr, m.eq_data[self._eq, 6:10].copy()); Rr = Rr.reshape(3, 3)
                     Rz = np.array([[cs, -sn, 0], [sn, cs, 0], [0, 0, 1.0]])
                     m.eq_data[self._eq, 6:10] = mat2quat(Rz @ Rr)
-        if not held and want_grip:
+            return True
+        if not want_grip:
+            self._ease_i = None   # trigger released before a grasp was ever locked in -- nothing in progress
+            return False
+        # not held, want_grip: either start or continue easing into a grasp lock.
+        if self._ease_i is None:
             touching = set()
             for c in d.contact[:d.ncon]:
                 for a_, b_ in ((c.geom1, c.geom2), (c.geom2, c.geom1)):
                     if a_ in self._pads and m.geom_bodyid[b_] == self._pegb:
                         touching.add(a_)
-            if len(touching) == 2:
-                Rg, pg = d.xmat[self._gb].reshape(3, 3), d.xpos[self._gb]
-                Rr, pr = Rg.T @ d.xmat[self._pegb].reshape(3, 3), Rg.T @ (d.xpos[self._pegb] - pg)
-                ax = Rr[:, 2]; tg = np.array([0, np.sign(ax[1]) or 1.0, 0.0]); v = np.cross(ax, tg); c = float(ax @ tg)
-                K = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-                Rr = (np.eye(3) + K + K @ K / (1 + c)) @ Rr; pr = pr.copy(); pr[2] = 0.0
-                d.qpos[self.peg_adr:self.peg_adr + 7] = [*(pg + Rg @ pr), *mat2quat(Rg @ Rr)]; d.qvel[self.peg_dof:self.peg_dof + 6] = 0
-                m.eq_data[self._eq, :] = 0
-                m.eq_data[self._eq, 3:6] = pr; m.eq_data[self._eq, 6:10] = mat2quat(Rr); m.eq_data[self._eq, 10] = 1.0
-                import pincopen as PC
-                self._x_target = float(PC._META["mount"]["tcp_x_g_mm"]) * 1e-3 if self.cfg.get("peg", {}).get("axis_through_tcp", True) else None
-                self._pivot = np.array([pr[0], 0.0])
-                d.eq_active[self._eq] = 1
-                return True
-        return held
+            if len(touching) != 2:
+                return False
+            Rg, pg = d.xmat[self._gb].reshape(3, 3), d.xpos[self._gb]
+            Rr, pr = Rg.T @ d.xmat[self._pegb].reshape(3, 3), Rg.T @ (d.xpos[self._pegb] - pg)
+            ax = Rr[:, 2]; tg = np.array([0, np.sign(ax[1]) or 1.0, 0.0]); v = np.cross(ax, tg); c = float(ax @ tg)
+            K = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            Rr_t = (np.eye(3) + K + K @ K / (1 + c)) @ Rr
+            pr_t = pr.copy(); pr_t[2] = 0.0
+            self._ease_from_pr, self._ease_from_Rr = pr, Rr
+            self._ease_to_pr, self._ease_to_Rr = pr_t, Rr_t
+            self._ease_i = 0
+        # ease the position/orientation correction toward the squared-up target
+        # over EASE_STEPS calls (instead of one instant teleport, which is both
+        # visually jarring and, combined with the pads' own contact still being
+        # active against a now-rigid weld, was the reproducible cause of the peg
+        # slipping mid-transport under fast arm motion -- see CHANGELOG.md).
+        self._ease_i += 1
+        t = min(1.0, self._ease_i / self.EASE_STEPS)
+        Rg, pg = d.xmat[self._gb].reshape(3, 3), d.xpos[self._gb]
+        pr = (1 - t) * self._ease_from_pr + t * self._ease_to_pr
+        q = (1 - t) * mat2quat(self._ease_from_Rr) + t * mat2quat(self._ease_to_Rr)
+        q = q / max(np.linalg.norm(q), 1e-9)
+        d.qpos[self.peg_adr:self.peg_adr + 7] = [*(pg + Rg @ pr), *q]
+        d.qvel[self.peg_dof:self.peg_dof + 6] = 0
+        if t < 1.0:
+            return False
+        # ease-in complete: lock the weld at the reached offset, and disable pad<->peg
+        # contact from here -- the weld alone holds the peg; leaving pad contact active
+        # too just gives it something to fight under fast arm motion (see above).
+        m.eq_data[self._eq, :] = 0
+        m.eq_data[self._eq, 3:6] = self._ease_to_pr; m.eq_data[self._eq, 6:10] = mat2quat(self._ease_to_Rr); m.eq_data[self._eq, 10] = 1.0
+        import pincopen as PC
+        self._x_target = float(PC._META["mount"]["tcp_x_g_mm"]) * 1e-3 if self.cfg.get("peg", {}).get("axis_through_tcp", True) else None
+        self._pivot = np.array([self._ease_to_pr[0], 0.0])
+        d.eq_active[self._eq] = 1
+        for p in self._pads:
+            m.geom_contype[p] = 0
+            m.geom_conaffinity[p] = 0
+        self._ease_i = None
+        return True
 
     # -- cameras (cheap update, no physics)
     def update_cameras(self, cfg: dict):

@@ -227,6 +227,8 @@ Regenerating from `cad/` reproduces the committed assets (checked for the grippe
 * **Gripper looks like blobs / spheres**: mesh geoms need `type="mesh"` in older MuJoCo versions; already handled in `assets/`, but keep it in mind if you add snippets.
 * **Cannot find dataset**: set `UR10SIM_DATASETS`, folder layout `<name>/data/chunk-000/episode_000000.parquet` and `<name>/videos/chunk-000/observation.images.cam_high/episode_000000.mp4`.
 * **`--window` needs `$DISPLAY`** and tkinter; falls back to PNG watching otherwise.
+* **Grasped peg slips / drifts during teleop, especially fast wrist rotation**: a known limitation of `Scene.grasp_assist`'s `hang_under_gravity` correction, gated but not eliminated -- see `peg.hang_max_gripper_radps` in `scene_config.yaml` and the 2026-09-29 entry in `ur10_agent/CHANGELOG.md` (upstream repo) for the measurements and the tradeoff of tightening it further.
+* **Peg pose goes to NaN / the peg visually disappears**: `grasp_assist` now detects this and force-releases + resets to the last good pose instead of propagating it, but if you still see it happen, that's the underlying instability, not just this recovery path -- worth reporting with the joint trajectory that triggered it.
 
 ## Licences and credits
 
