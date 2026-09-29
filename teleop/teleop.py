@@ -128,8 +128,23 @@ def main() -> int:
             return 1
         if force_recalibrate:
             print("Recalibrating GELLO now...")
+            # connect() (via _connect_gello) already started the async background
+            # read thread (use_async=True by default), which continuously reads
+            # the Dynamixel bus -- calibrate()'s disable_torque() WRITE races with
+            # that thread's READs on the same serial port ("Port is in use!") if
+            # it's still running. Stop it first, recalibrate + reconfigure exactly
+            # like a normal connect() would, then restart it the same way connect()
+            # does.
+            was_async = bool(getattr(gello.config, "use_async", False) and gello.thread is not None)
+            if was_async:
+                gello._stop_read_thread()
             gello.calibration = None       # bypass the "keep existing?" prompt; go straight to capture
             gello.calibrate()
+            gello.configure()
+            if was_async:
+                raw_action = gello.bus.sync_read("Present_Position", normalize=False)
+                gello.latest_action = gello._process_action(raw_action)
+                gello._start_read_thread()
     else:
         from quest_teleop import start_server
         quest, err = start_server(args)
