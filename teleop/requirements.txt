@@ -1,0 +1,13 @@
+# Cross-platform (needed no matter which method you use):
+numpy
+websockets>=12
+opencv-python          # camera window (falls back to tkinter if this build has no GUI backend)
+Pillow                 # tkinter camera-window fallback
+
+# Robot-PC-only (real hardware; not needed for a --method quest dry-run away
+# from the robot, but required for --live and for GELLO either way):
+lerobot                # provides the GELLO teleoperator + Dynamixel motor bus
+                        # (pip install lerobot, or your UR10 fork -- see GUIDE.md)
+ur-rtde                # UR10 RTDE control/receive
+pyrealsense2           # RealSense D415/D435i cameras
+dynamixel-sdk          # GELLO leader arm + PincOpen gripper motors

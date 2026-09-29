@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UR10 Quest Teleop</title>
+  <style>
+    * { box-sizing: border-box; }
+    body  { font-family: monospace; background: #0d1117; color: #c9d1d9;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 16px; margin: 0; }
+    h1    { color: #58a6ff; margin: 8px 0; font-size: 18px;
+            position: relative; z-index: 2; }
+    .card { background: rgba(22,27,34,0.92); border: 1px solid #30363d;
+            border-radius: 8px; padding: 12px; margin: 6px 0; width: 360px;
+            position: relative; z-index: 2; }           /* ← z-index: 2 keeps cards above canvas */
+    .row  { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+    .dot  { width: 10px; height: 10px; border-radius: 50%;
+            background: #f85149; flex-shrink: 0; }
+    .dot.ok   { background: #3fb950; }
+    .dot.warn { background: #d29922; }
+    button           { background: #238636; color: #fff; border: none;
+                       border-radius: 6px; padding: 9px 14px; margin: 3px;
+                       font-size: 13px; cursor: pointer; width: 100%; }
+    button:disabled  { background: #30363d; color: #8b949e; cursor: not-allowed; }
+    button.red   { background: #da3633; }
+    button.blue  { background: #1f6feb; }
+    pre   { font-size: 11px; color: #8b949e; line-height: 1.5; margin: 4px 0; }
+    #log  { max-height: 110px; overflow-y: auto; font-size: 11px; }
+
+    /* ── In-headset HUD ───────────────────────────────────────────── */
+    #hud {
+      display: none; position: fixed;
+      bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); color: #fff; font-family: monospace;
+      font-size: 20px; padding: 14px 22px; border-radius: 10px;
+      border: 2px solid #58a6ff; text-align: center;
+      z-index: 20; min-width: 320px; line-height: 1.9; pointer-events: none;
+    }
+    #hud .big  { font-size: 26px; font-weight: bold; }
+    #hud .ok   { color: #3fb950; }
+    #hud .warn { color: #d29922; }
+
+    /* ── Three.js canvas ──────────────────────────────────────────── */
+    #three-canvas {
+      position: fixed !important;
+      top: 0; left: 0;
+      width: 100vw !important; height: 100vh !important;
+      z-index: 0;                /* behind HTML cards      */
+      pointer-events: none;      /* ← CRITICAL: don't eat clicks */
+    }
+  </style>
+</head>
+<body>
+
+<h1>UR10 Quest Teleop</h1>
+
+<div class="card">
+  <div class="row"><div class="dot" id="d-ws"></div><span id="l-ws">WebSocket: connecting…</span></div>
+  <div class="row"><div class="dot" id="d-rv"></div><span id="l-rv">Robot viz: connecting…</span></div>
+  <div class="row"><div class="dot" id="d-xr"></div><span id="l-xr">XR: not started</span></div>
+  <div class="row"><div class="dot" id="d-ctrl"></div><span id="l-ctrl">Controllers: waiting…</span></div>
+  <div class="row" style="margin-top:6px">
+    <span style="font-size:12px;color:#8b949e">Sends/s: </span>
+    <span id="hz" style="font-size:12px;color:#58a6ff">0</span>
+  </div>
+</div>
+
+<div class="card">
+  <button id="btn-ar">▶ Enter AR (overlay + robot viz)</button>
+  <button id="btn-vr" class="blue">▶ Enter VR (robot viz, no passthrough)</button>
+  <button id="btn-stop" class="red" disabled>■ Exit session</button>
+</div>
+
+<div class="card">
+  <pre id="p-left">Left:  —</pre>
+  <pre id="p-right">Right: —</pre>
+  <pre id="p-robot">Robot: —</pre>
+</div>
+
+<div class="card">
+  <strong>Controls</strong>
+  <pre>Left  GRIP  → Calibrate / Reset
+Left  TRIG  → Home robot
+Right GRIP  → Track (hold)
+Right TRIG  → Toggle gripper</pre>
+</div>
+
+<div class="card"><strong>Log</strong><div id="log"></div></div>
+
+<!-- In-headset HUD -->
+<div id="hud">
+  <div class="big" id="hud-mode">● IDLE</div>
+  <div id="hud-ctrl">Controllers: —</div>
+  <div id="hud-tcp" style="font-size:14px;color:#8b949e">TCP: —</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ══════════════════════════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════════════════════════ */
+const WS_URL        = `wss://${location.host}/ws`;
+const ROBOT_WS_URL  = `wss://${location.host}/robot_ws`;
+const SEND_INTERVAL = 1000 / 90;
+
+/* ── UR10 standard DH parameters ───────────────────────────────────
+   [a (m), d (m), alpha (rad)]   theta = joint variable
+*/
+const DH = [
+  { a:  0,       d: 0.1273, alpha:  Math.PI/2 },
+  { a: -0.6120,  d: 0,      alpha:  0         },
+  { a: -0.5723,  d: 0,      alpha:  0         },
+  { a:  0,       d: 0.1639, alpha:  Math.PI/2 },
+  { a:  0,       d: 0.1157, alpha: -Math.PI/2 },
+  { a:  0,       d: 0.0922, alpha:  0         },
+];
+
+const HOME_Q = [0, -Math.PI/2, Math.PI/2, -Math.PI/2, -Math.PI/2, 0];
+
+/* ══════════════════════════════════════════════════════════════════
+   THREE.JS SETUP
+══════════════════════════════════════════════════════════════════ */
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+renderer.domElement.id = 'three-canvas';  // picks up CSS above (pointer-events:none)
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(1, 2, 1);
+scene.add(sun);
+
+/* ── Robot root pivot ───────────────────────────────────────────────
+   Placed 1.2 m in front of user at ~table height.
+   Tune ROBOT_ORIGIN to align the virtual base with the real robot base.
+   rotation.x = -π/2 converts UR's Z-up frame → Three.js Y-up.
+*/
+const ROBOT_ORIGIN = new THREE.Vector3(0, -0.3, -1.2);
+const robotRoot = new THREE.Group();
+robotRoot.position.copy(ROBOT_ORIGIN);
+robotRoot.rotation.x = -Math.PI / 2;
+scene.add(robotRoot);
+
+/* ── Materials ─────────────────────────────────────────────────── */
+const M_LINK  = new THREE.MeshPhongMaterial({ color: 0x2a5caa, transparent: true, opacity: 0.88 });
+const M_JOINT = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+const M_BASE  = new THREE.MeshPhongMaterial({ color: 0x444444 });
+const M_TCP   = new THREE.MeshPhongMaterial({ color: 0x3fb950, transparent: true, opacity: 0.9 });
+const M_GHOST = new THREE.MeshPhongMaterial({ color: 0xf0a020, transparent: true, opacity: 0.6 });
+const M_AX_X  = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+const M_AX_Z  = new THREE.MeshBasicMaterial({ color: 0x33ff33 });
+
+/* ── Geometry helpers ───────────────────────────────────────────── */
+const mkSphere = (r, m)    => new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m);
+const mkCyl    = (r, h, m) => new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 16), m);
+const mkBox    = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+
+/* ── Robot geometry — ALL flat children of robotRoot ────────────────
+   NO parent chains — applyFK sets positions from scratch every frame.
+*/
+
+// Base plate (fixed)
+const basePlate = mkBox(0.22, 0.06, 0.22, M_BASE);
+basePlate.position.set(0, 0, 0.03);   // z = up in UR frame (before robotRoot rotation)
+robotRoot.add(basePlate);
+
+// 6 joint spheres + 6 link cylinders, all direct children of robotRoot
+const jointSpheres  = [];
+const linkCylinders = [];
+const JOINT_RADII   = [0.055, 0.050, 0.045, 0.040, 0.038, 0.036];
+const LINK_RADII    = [0.052, 0.040, 0.038, 0.032, 0.030, 0.028];
+
+for (let i = 0; i < 6; i++) {
+  const js = mkSphere(JOINT_RADII[i], M_JOINT);
+  robotRoot.add(js);
+  jointSpheres.push(js);
+
+  // Height = 1.0 — we scale .y each frame to match actual link length
+  const lc = mkCyl(LINK_RADII[i], 1.0, M_LINK);
+  robotRoot.add(lc);
+  linkCylinders.push(lc);
+}
+
+// Base-to-joint-0 link (a bit fatter, darker)
+const baseLink = mkCyl(0.058, 1.0, M_BASE);
+robotRoot.add(baseLink);
+
+// TCP marker (child of robotRoot for simplicity)
+const tcpMarker = mkSphere(0.038, M_TCP);
+const tcpAxX = mkCyl(0.005, 0.12, M_AX_X);
+tcpAxX.rotation.z = -Math.PI / 2; tcpAxX.position.x = 0.06;
+const tcpAxZ = mkCyl(0.005, 0.12, M_AX_Z);
+tcpAxZ.position.y = 0.06;
+tcpMarker.add(tcpAxX, tcpAxZ);
+robotRoot.add(tcpMarker);
+
+// Workspace boundary (wireframe box)
+const wsEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.8, 1.05, 1.8));
+const wsBox   = new THREE.LineSegments(wsEdges,
+                  new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.25 }));
+wsBox.position.set(0, 0, 0.575);   // z centre = (0.05 + 1.10) / 2 in UR frame
+robotRoot.add(wsBox);
+
+// Grid floor in world space
+const grid = new THREE.GridHelper(5, 25, 0x334455, 0x1e2d3d);
+grid.position.y = ROBOT_ORIGIN.y - 0.01;
+scene.add(grid);
+
+/* ══════════════════════════════════════════════════════════════════
+   FORWARD KINEMATICS
+══════════════════════════════════════════════════════════════════ */
+function dhMatrix(a, d, alpha, theta) {
+  const ct = Math.cos(theta), st = Math.sin(theta);
+  const ca = Math.cos(alpha), sa = Math.sin(alpha);
+  const m  = new THREE.Matrix4();
+  m.set(
+     ct, -st * ca,  st * sa,  a * ct,
+     st,  ct * ca, -ct * sa,  a * st,
+      0,       sa,       ca,       d,
+      0,        0,        0,       1
+  );
+  return m;
+}
+
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _tmpP  = new THREE.Vector3();
+const _tmpQ  = new THREE.Quaternion();
+const _tmpS  = new THREE.Vector3(1, 1, 1);
+
+function placeCylBetween(cyl, pA, pB) {
+  /* Position cylinder between two points, scale Y to span the distance. */
+  const dir = _tmpP.copy(pB).sub(pA);
+  const len = dir.length();
+  cyl.scale.y = Math.max(len, 0.001);
+  cyl.position.copy(pA).lerp(pB, 0.5);
+  if (len > 1e-4) {
+    cyl.quaternion.setFromUnitVectors(_yAxis, dir.normalize());
+  }
+}
+
+function applyFK(joints) {
+  /* Compute joint-frame positions in UR base space (robotRoot local),
+     then place all geometry — no hierarchy needed. */
+  let mat = new THREE.Matrix4();
+  const pos = [new THREE.Vector3(0, 0, 0)];   // pos[0] = base origin
+
+  for (let i = 0; i < 6; i++) {
+    mat = mat.clone().multiply(dhMatrix(DH[i].a, DH[i].d, DH[i].alpha, joints[i]));
+    mat.decompose(_tmpP, _tmpQ, _tmpS);
+    pos.push(_tmpP.clone());   // pos[1..6]
+  }
+
+  // Joint spheres at pos[1..6]
+  for (let i = 0; i < 6; i++) {
+    jointSpheres[i].position.copy(pos[i + 1]);
+  }
+
+  // Base link: base origin → pos[1]
+  placeCylBetween(baseLink, pos[0], pos[1]);
+
+  // Links: pos[i+1] → pos[i+2]  (i = 0..4, i.e. links 1-5)
+  // Link 5 (wrist): pos[5] → pos[6] (TCP)
+  for (let i = 0; i < 6; i++) {
+    placeCylBetween(linkCylinders[i], pos[i + 1], pos[i > 0 ? i + 1 : 1]);
+  }
+
+  // Recompute: link i spans pos[i] → pos[i+1]  (simpler indexing)
+  placeCylBetween(baseLink,           pos[0], pos[1]);
+  for (let i = 0; i < 6; i++) {
+    // link[0] = base→j1, link[1] = j1→j2, … link[5] = j5→TCP
+    placeCylBetween(linkCylinders[i], pos[i], pos[i + 1]);
+  }
+
+  // TCP marker
+  tcpMarker.position.copy(pos[6]);
+  mat.decompose(_tmpP, _tmpQ, _tmpS);
+  tcpMarker.quaternion.copy(_tmpQ);
+}
+
+applyFK(HOME_Q);
+
+/* ══════════════════════════════════════════════════════════════════
+   RIGHT CONTROLLER GHOST (world space)
+══════════════════════════════════════════════════════════════════ */
+const ctrlGhost = mkSphere(0.032, M_GHOST);
+ctrlGhost.visible = false;
+scene.add(ctrlGhost);
+
+const rayMat = new THREE.LineBasicMaterial({ color: 0xf0a020, transparent: true, opacity: 0.55 });
+const rayGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -0.25)
+]);
+const ctrlRay = new THREE.Line(rayGeo, rayMat);
+ctrlRay.visible = false;
+scene.add(ctrlRay);
+
+/* ══════════════════════════════════════════════════════════════════
+   CAMERA PANEL  (added for openpi/ur10_agent: robot camera frames from /cam_ws)
+   Move it with the page URL:  https://<ip>:8443/?cam=x,y,z   (default 0,1.4,-1.0
+   in the WebXR reference space; width 1.2 m)
+══════════════════════════════════════════════════════════════════ */
+const CAM_WS_URL = `wss://${location.host}/cam_ws`;
+const camCanvas = document.createElement('canvas');
+camCanvas.width = 800; camCanvas.height = 326;
+const camCtx = camCanvas.getContext('2d');
+camCtx.fillStyle = '#111'; camCtx.fillRect(0, 0, 800, 326);
+const camTex = new THREE.CanvasTexture(camCanvas);
+camTex.colorSpace = THREE.SRGBColorSpace;
+const camPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: camTex, side: THREE.DoubleSide }));
+const camPos = (new URLSearchParams(location.search).get('cam') || '0,1.4,-1.0').split(',').map(Number);
+camPlane.position.set(camPos[0], camPos[1], camPos[2]);
+camPlane.scale.set(1.2, 1.2 * 326 / 800, 1);
+scene.add(camPlane);
+function connectCamWS() {
+  const w = new WebSocket(CAM_WS_URL);
+  w.binaryType = 'blob';
+  w.onmessage = async (ev) => {
+    try {
+      const bmp = await createImageBitmap(ev.data);
+      if (camCanvas.width !== bmp.width || camCanvas.height !== bmp.height) {
+        camCanvas.width = bmp.width; camCanvas.height = bmp.height;
+        camPlane.scale.set(1.2, 1.2 * bmp.height / bmp.width, 1);
+      }
+      camCtx.drawImage(bmp, 0, 0);
+      camTex.needsUpdate = true;
+      bmp.close();
+    } catch (e) {}
+  };
+  w.onclose = () => setTimeout(connectCamWS, 2000);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WEBSOCKET: controller data
+══════════════════════════════════════════════════════════════════ */
+let ws = null, lastSendTs = 0, sendCount = 0, hzTimer = null;
+
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen  = () => { setDot('d-ws','ok'); setText('l-ws','WebSocket: connected');
+                       btnAR.disabled = false; btnVR.disabled = false; log('WS connected'); };
+  ws.onclose = () => { setDot('d-ws',''); setText('l-ws','WebSocket: reconnecting…');
+                       btnAR.disabled = true; btnVR.disabled = true;
+                       setTimeout(connectWS, 2000); };
+  ws.onerror = () => log('WS error');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WEBSOCKET: robot state (30 Hz from Python)
+══════════════════════════════════════════════════════════════════ */
+let robotWs = null;
+
+function connectRobotWS() {
+  robotWs = new WebSocket(ROBOT_WS_URL);
+  robotWs.onopen  = () => { setDot('d-rv','ok');  setText('l-rv','Robot viz: connected'); };
+  robotWs.onclose = () => { setDot('d-rv','');    setText('l-rv','Robot viz: reconnecting…');
+                            setTimeout(connectRobotWS, 2000); };
+  robotWs.onerror = () => {};
+  robotWs.onmessage = (ev) => {
+    try {
+      const d = JSON.parse(ev.data);
+      if (d.joints) {
+        applyFK(d.joints);
+        if (d.tcp) {
+          const t = d.tcp;
+          setText('p-robot',
+            `TCP: [${t.slice(0,3).map(v=>v.toFixed(3)).join(', ')}]\n` +
+            `Ori: [${t.slice(3).map(v=>v.toFixed(3)).join(', ')}]\n` +
+            `Mode: ${d.mode ?? '?'}`);
+          setText('hud-tcp',
+            `TCP [${t[0].toFixed(2)}, ${t[1].toFixed(2)}, ${t[2].toFixed(2)}]  ${d.mode}`);
+          if (d.mode) {
+            const modeEl = document.getElementById('hud-mode');
+            modeEl.textContent = `● ${d.mode}`;
+            modeEl.className = 'big ' + (d.mode === 'TRACKING' ? 'ok' : d.mode === 'CALIBRATED' ? 'warn' : '');
+          }
+        }
+      }
+    } catch(_) {}
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   XR SESSION
+══════════════════════════════════════════════════════════════════ */
+let xrSession = null, refSpace = null, domOverlay = false;
+
+const btnAR   = document.getElementById('btn-ar');
+const btnVR   = document.getElementById('btn-vr');
+const btnStop = document.getElementById('btn-stop');
+const hud     = document.getElementById('hud');
+
+btnAR.onclick   = () => startXR('ar');
+btnVR.onclick   = () => startXR('vr');
+btnStop.onclick = () => xrSession?.end();
+
+async function startXR(prefer) {
+  if (!navigator.xr) { log('WebXR not supported'); return; }
+
+  let mode, opts;
+  if (prefer === 'ar' && await navigator.xr.isSessionSupported('immersive-ar')) {
+    mode = 'immersive-ar';
+    opts = { requiredFeatures: ['local-floor'],
+             optionalFeatures: ['dom-overlay', 'hand-tracking'],
+             domOverlay: { root: document.body } };
+  } else {
+    mode = 'immersive-vr';
+    if (!await navigator.xr.isSessionSupported('immersive-vr')) {
+      log('No XR mode supported'); return;
+    }
+    opts = { requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'] };
+  }
+
+  for (const rf of ['local-floor', 'local']) {
+    try {
+      opts.requiredFeatures = [rf];
+      xrSession = await navigator.xr.requestSession(mode, opts);
+      log(`Session: ${mode} / ${rf}`);
+      break;
+    } catch(e) {
+      if (rf === 'local') { log('Session failed: ' + e.message); return; }
+    }
+  }
+
+  domOverlay = xrSession.domOverlayState?.type != null;
+  log(`dom-overlay: ${domOverlay ? xrSession.domOverlayState.type : 'off'}`);
+
+  await renderer.xr.setSession(xrSession);   // Three.js manages GL + XRWebGLLayer
+
+  try {
+    refSpace = await xrSession.requestReferenceSpace('local-floor');
+  } catch(_) {
+    refSpace = await xrSession.requestReferenceSpace('local');
+  }
+
+  xrSession.addEventListener('inputsourceschange', (ev) => {
+    log(`inputsourceschange: +${ev.added.length}/-${ev.removed.length} total:${xrSession.inputSources.length}`);
+    for (const s of ev.added) log(`  ✓ [${s.handedness}] ${s.profiles[0] ?? '?'}`);
+  });
+  xrSession.addEventListener('selectstart', ev => log(`trigger: ${ev.inputSource.handedness}`));
+
+  xrSession.addEventListener('end', () => {
+    hud.style.display = 'none'; domOverlay = false;
+    setDot('d-xr',''); setText('l-xr','XR: ended');
+    btnStop.disabled = true; btnAR.disabled = false; btnVR.disabled = false;
+    clearInterval(hzTimer); log('Session ended');
+  });
+
+  if (domOverlay) hud.style.display = 'block';
+  setDot('d-xr','ok'); setText('l-xr', `XR: ${mode}${domOverlay ? ' +overlay' : ''}`);
+  btnStop.disabled = false; btnAR.disabled = true; btnVR.disabled = true;
+  hzTimer = setInterval(() => { setText('hz', sendCount); sendCount = 0; }, 1000);
+  log('*** Squeeze both controllers ***');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTROLLER READ
+══════════════════════════════════════════════════════════════════ */
+function readController(frame, src) {
+  const space = src.gripSpace ?? src.targetRaySpace;
+  if (!space) return null;
+  const pose = frame.getPose(space, refSpace);
+  if (!pose) return null;
+  const t = pose.transform, gp = src.gamepad;
+  return {
+    pos:        [t.position.x,    t.position.y,    t.position.z],
+    quat:       [t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w],
+    trigger:    gp?.buttons[0]?.value   ?? 0,
+    grip:       gp?.buttons[1]?.value   ?? 0,
+    thumbstick: [gp?.axes?.[2] ?? 0,   gp?.axes?.[3] ?? 0],
+    btn_a:      gp?.buttons[4]?.pressed ?? false,
+    btn_b:      gp?.buttons[5]?.pressed ?? false,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RENDER LOOP
+══════════════════════════════════════════════════════════════════ */
+renderer.setAnimationLoop((ts, frame) => {
+  if (frame && xrSession && refSpace) {
+    let left = null, right = null;
+    const nSrc = xrSession.inputSources.length;
+
+    for (const src of xrSession.inputSources) {
+      if (src.handedness === 'left')  left  = readController(frame, src);
+      if (src.handedness === 'right') right = readController(frame, src);
+    }
+
+    // Controller ghost
+    if (right) {
+      ctrlGhost.visible = ctrlRay.visible = true;
+      ctrlGhost.position.set(...right.pos);
+      ctrlGhost.quaternion.set(...right.quat);
+      ctrlRay.position.set(...right.pos);
+      ctrlRay.quaternion.set(...right.quat);
+    } else {
+      ctrlGhost.visible = ctrlRay.visible = false;
+    }
+
+    const hasCtrl = !!(left || right);
+    setDot('d-ctrl', hasCtrl ? 'ok' : (nSrc > 0 ? 'warn' : ''));
+    setText('l-ctrl', hasCtrl
+      ? `Controllers: tracking ✓ (${nSrc})`
+      : (nSrc > 0 ? `${nSrc} src — squeeze harder` : 'Not detected'));
+    if (domOverlay) {
+      const hctrl = document.getElementById('hud-ctrl');
+      hctrl.textContent = hasCtrl ? '🟢 Controllers tracking' : '🟡 Squeeze controllers';
+      hctrl.className   = hasCtrl ? 'ok' : 'warn';
+    }
+
+    if (left)  setText('p-left',  `L [${left.pos.map(v=>v.toFixed(3)).join(', ')}]  grip:${left.grip.toFixed(2)}`);
+    if (right) setText('p-right', `R [${right.pos.map(v=>v.toFixed(3)).join(', ')}]  trig:${right.trigger.toFixed(2)}`);
+
+    if (ws?.readyState === WebSocket.OPEN && (ts - lastSendTs) >= SEND_INTERVAL) {
+      ws.send(JSON.stringify({ left, right, ts }));
+      lastSendTs = ts; sendCount++;
+    }
+  }
+
+  renderer.render(scene, camera);
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   HELPERS / BOOT
+══════════════════════════════════════════════════════════════════ */
+const setDot  = (id, cls) =>
+  document.getElementById(id).className = 'dot' + (cls ? ' ' + cls : '');
+const setText = (id, txt) => {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+};
+function log(msg) {
+  const el = document.getElementById('log');
+  const t  = new Date().toLocaleTimeString();
+  el.innerHTML = `<div>[${t}] ${msg}</div>` + el.innerHTML.slice(0, 2400);
+  console.log(`[${t}] ${msg}`);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+connectWS();
+connectRobotWS();
+connectCamWS();
+log('Page loaded');
+</script>
+</body>
+</html>
+

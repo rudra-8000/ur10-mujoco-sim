@@ -199,7 +199,7 @@ def add_wrist_mount(gbody: ET.Element, asset: ET.Element, w: dict, W: int, H: in
         ET.SubElement(asset, "mesh", name=p["mesh"], file=str(D435I / "meshes" / f"{p['mesh']}.stl"))
     yaw = ET.SubElement(gbody, "body", name="wrist_yaw", quat=fmt(mat2quat(rot_x(np.radians(w.get("body_yaw_deg", 0.0))))))
     mount = ET.SubElement(yaw, "body", name="wrist_mount", pos=fmt(F["pivot"]), quat=fmt(mat2quat(rot_z(np.radians(mc.get("angle_deg", 0.0))))))
-    vis = dict(type="mesh", contype="0", conaffinity="0", group="1", mass="0")
+    vis = dict(type="mesh", contype="0", conaffinity="0", group="1", mass="1e-6")  # ~0 kg but nonzero: some MuJoCo versions (2.3.7) refuse to compile a body whose every geom is exactly mass=0 ("body mass is too small, cannot compute center of mass") -- purely visual/noncolliding meshes either way
     ET.SubElement(mount, "geom", mesh="camera_mount", rgba="0.93 0.55 0.12 1", **vis)
     cam = ET.SubElement(mount, "body", name="d435i", pos=fmt(F["origin"]), quat=fmt(mat2quat(F["Rc"])))
     for p in F["dmeta"]["parts"]:
