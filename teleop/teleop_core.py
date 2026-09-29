@@ -357,7 +357,10 @@ def _connect_gello(args):
         from lerobot.teleoperators import make_teleoperator_from_config
         from lerobot.teleoperators.lerobot_teleoperator_gello import GelloConfig
     except Exception as e:  # noqa: BLE001
-        return None, f"lerobot GELLO not importable here ({type(e).__name__}) — run on the robot PC with the lerobot env active"
+        return None, (f"lerobot_ur10 fork not installed here ({type(e).__name__}) -- "
+                     "plain 'pip install lerobot' is not enough: "
+                     "git clone https://github.com/rudra-8000/lerobot_ur10.git && pip install -e ./lerobot_ur10 "
+                     "(see GUIDE.md 1.0). Needed for --sim too -- GELLO input reading doesn't depend on the robot side.")
     if not os.path.exists(args.teleop_port):
         return None, "leader USB port not found (--teleop-port)"
     try:

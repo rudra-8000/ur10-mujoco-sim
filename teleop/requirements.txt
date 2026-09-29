@@ -1,13 +1,22 @@
-# Cross-platform (needed no matter which method you use):
+# Cross-platform (needed no matter which method you use, including --sim):
 numpy
 websockets>=12
 opencv-python          # camera window (falls back to tkinter if this build has no GUI backend)
 Pillow                 # tkinter camera-window fallback
 
-# Robot-PC-only (real hardware; not needed for a --method quest dry-run away
-# from the robot, but required for --live and for GELLO either way):
-lerobot                # provides the GELLO teleoperator + Dynamixel motor bus
-                        # (pip install lerobot, or your UR10 fork -- see GUIDE.md)
+# GELLO input (needed for --method gello regardless of --sim/--live -- GELLO
+# is a physical leader arm; reading its joint encoders over Dynamixel/USB
+# needs lerobot's motor-bus + teleoperator plugin code no matter what the
+# ROBOT side is). NOT plain `pip install lerobot` -- the GELLO teleoperator
+# class (lerobot.teleoperators.lerobot_teleoperator_gello) and the UR10
+# robot driver (lerobot.robots.lerobot_robot_ur10) are this project's own
+# fork, not part of vanilla lerobot on PyPI:
+#   git clone https://github.com/rudra-8000/lerobot_ur10.git
+#   pip install -e ./lerobot_ur10
+# --method quest needs none of this (the Quest headset talks WebSocket/JSON
+# directly, not Dynamixel).
+
+# Robot-PC-only (real hardware; needed for --live, not for --sim):
 ur-rtde                # UR10 RTDE control/receive
 pyrealsense2           # RealSense D415/D435i cameras
 dynamixel-sdk          # GELLO leader arm + PincOpen gripper motors

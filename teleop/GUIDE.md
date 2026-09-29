@@ -53,6 +53,25 @@ matches it 1:1. Hardware design and BOM: <https://wuphilipp.github.io/gello_site
 This repo only covers the *software* side (reading it as a lerobot
 teleoperator); build/assemble the arm itself from that site.
 
+### 1.0 Software install (do this first, on any machine, before --sim or --live)
+
+Reading GELLO is real hardware I/O over USB/Dynamixel — this is needed no
+matter what's on the *other* end (the real robot or the sim), so it's not
+something `--sim` lets you skip.
+
+**`pip install lerobot` (plain, from PyPI) is not enough.** The GELLO
+teleoperator class (`lerobot.teleoperators.lerobot_teleoperator_gello`) and,
+for `--live`, the UR10 robot driver (`lerobot.robots.lerobot_robot_ur10`)
+are this project's own fork, not part of vanilla lerobot:
+
+```bash
+git clone https://github.com/rudra-8000/lerobot_ur10.git
+pip install -e ./lerobot_ur10
+```
+Do this inside the same Python environment you run `teleop.py` from. Skip it
+entirely only if you're doing `--method quest` — the Quest headset talks
+WebSocket/JSON directly and never touches lerobot at all.
+
 ### 1.1 Wiring
 
 - 6 arm joints + 1 gripper = 7 Dynamixel servos (XL330-M288 for the joints,
@@ -239,7 +258,7 @@ on with your arm in a different spot).
 | Symptom | Likely cause |
 |---|---|
 | `GELLO unavailable: leader USB port not found` | Wrong `--teleop-port`, or the U2D2/FTDI adapter isn't plugged in / powered. Check `ls /dev/serial/by-id/`. |
-| `lerobot GELLO not importable here` | You're running this somewhere without the `lerobot` package (or your fork) installed — run on the robot PC with that environment active. |
+| `lerobot GELLO not importable here` / `ModuleNotFoundError: No module named 'lerobot'` | The `lerobot_ur10` fork isn't installed in this Python environment (see 1.0) — plain `pip install lerobot` does not provide it. This applies to `--sim` too: GELLO input reading needs it regardless of what's on the robot side. |
 | Leader/robot pose mismatch refusal on connect | Either genuinely misaligned (raise `--teleop-max-align-rad` only if you understand why the gap is real) or a stale calibration — see 1.4. |
 | `Quest server unavailable: missing quest/index.html` | You're running `teleop.py` from somewhere other than this repo's root, or the `quest/` folder didn't come along — check your working directory. |
 | Quest page loads but nothing tracks | Confirm you tapped **Enter VR** (the page does nothing outside an active WebXR session) and that left/right grip presses show up in the on-page status log. |

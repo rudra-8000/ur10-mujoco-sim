@@ -31,9 +31,11 @@ robot, networking, and safety. This README is just the quick-start.
   over the network, running with a lerobot-compatible robot driver (RTDE
   control) — see `GUIDE.md`.
 - For GELLO (either mode — it's the input device, not the thing being
-  driven): the GELLO leader hardware (Dynamixel servos) and
-  `pip install lerobot` (its Dynamixel motor bus + GELLO teleoperator are
-  upstream, not fork-specific).
+  driven): the GELLO leader hardware (Dynamixel servos) and this project's
+  `lerobot_ur10` fork installed (`pip install -e .` from
+  https://github.com/rudra-8000/lerobot_ur10 — **not** plain `pip install
+  lerobot`; the GELLO teleoperator and UR10 driver classes live in this
+  fork, not on PyPI). See GUIDE.md.
 - For Quest (either mode): a Meta Quest 3 (or similar WebXR headset) on the
   same LAN as whatever machine is running `teleop.py`.
 - `pip install -r requirements.txt`
