@@ -438,7 +438,14 @@ class Scene:
             #     suppressed during fast teleop swings) -- see CHANGELOG.md 2026-09-29 for the measurements.
             #     Not a full fix: some residual drift remains at any nonzero threshold. Tune via
             #     peg.hang_max_gripper_radps in scene_config.yaml if this still isn't tight enough.
-            if pcfg.get("hang_under_gravity", True) and float(np.linalg.norm(d.cvel[self._gb][:3])) < pcfg.get("hang_max_gripper_radps", 0.08):
+            # default OFF: a real PincOpen grip is firm enough that the peg does not swing/reorient once
+            # grasped (user-confirmed on hardware) -- this correction exists only to patch a SIM contact-
+            # modeling gap (2 pad contacts leave rotation about the jaw axis under-constrained), and every
+            # time it fires it moves the peg relative to the gripper, i.e. makes sim diverge from the real
+            # rigid-grip behavior rather than match it. A plain rigid weld with no ongoing correction is
+            # the more sim-to-real-faithful default; opt in via peg.hang_under_gravity: true if a specific
+            # scene genuinely needs the settling behavior.
+            if pcfg.get("hang_under_gravity", False) and float(np.linalg.norm(d.cvel[self._gb][:3])) < pcfg.get("hang_max_gripper_radps", 0.08):
                 Rg = d.xmat[self._gb].reshape(3, 3)
                 dn = Rg.T @ np.array([0.0, 0.0, -1.0])
                 un = np.linalg.norm(dn[:2])
