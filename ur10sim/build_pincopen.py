@@ -243,6 +243,20 @@ def mjcf(gap):
     def geoms(body, pivot):
         return "\n".join(f'        <geom class="visual" mesh="{m}" pos="{fmt(-pivot)}"/>' for m in body_meshes[body])
 
+    # dr/ir/tip/or hinges had NO range at all (limited="false") -- a real gripper's pivots have hard
+    # mechanical stops; without them, nothing stops MuJoCo's loop-closure solver (the <connect> equality
+    # constraints below) from settling into the OTHER valid solution for a closed 4-bar linkage under a
+    # hard enough perturbation (fast/asymmetric contact) -- same joint angles, loop-closure still
+    # satisfied ("kinematically valid"), but the finger is flipped ~180 deg about its own axis. Measured
+    # normal operating range across 6 full open/close cycles (see CHANGELOG.md 2026-09-29), +-0.5 rad
+    # margin -- comfortably covers real operation, nowhere near the ~3.14 rad needed to reach the flip.
+    LINK_RANGE = {
+        "dr":  (-1.25, 2.00),
+        "ir":  (-1.40, 1.50),
+        "tip": (-2.05, 1.70),
+        "or":  (-1.55, 1.75),
+    }
+
     def hinge(name, rng=None, damping=0.001):
         r = f' range="{rng[0]:.5f} {rng[1]:.5f}" limited="true"' if rng else ""
         return f'<joint name="{name}" type="hinge" axis="0 -1 0"{r} damping="{damping}"/>'
@@ -258,15 +272,15 @@ def mjcf(gap):
     for s in ("L", "R"):
         pin = P3("cam_pin_" + s)
         A(f'        <body name="dr_{s}" pos="{fmt(pin - cam_p)}">')
-        A('          ' + inertial("dr_" + s, pin)); A(f'          {hinge("dr_" + s + "_joint")}'); A(geoms("dr_" + s, pin)); A('        </body>')
+        A('          ' + inertial("dr_" + s, pin)); A(f'          {hinge("dr_" + s + "_joint", LINK_RANGE["dr"])}'); A(geoms("dr_" + s, pin)); A('        </body>')
     A('      </body>')
     for s in ("L", "R"):
         irp = P3("ir_base_" + s)
         A(f'      <body name="ir_{s}" pos="{fmt(irp)}">')
-        A('        ' + inertial("ir_" + s, irp)); A(f'        {hinge("ir_" + s + "_joint")}'); A(geoms("ir_" + s, irp))
+        A('        ' + inertial("ir_" + s, irp)); A(f'        {hinge("ir_" + s + "_joint", LINK_RANGE["ir"])}'); A(geoms("ir_" + s, irp))
         tp = P3("ir_tip_" + s)
         A(f'        <body name="tip_{s}" pos="{fmt(tp - irp)}">')
-        A('          ' + inertial("tip_" + s, tp)); A(f'          {hinge("tip_" + s + "_joint")}'); A(geoms("tip_" + s, tp))
+        A('          ' + inertial("tip_" + s, tp)); A(f'          {hinge("tip_" + s + "_joint", LINK_RANGE["tip"])}'); A(geoms("tip_" + s, tp))
         yface = PAD_FACE_A[s]
         # pad box: inner face at yface, 4 mm thick toward the outside of the jaw
         sign = +1 if s == "L" else -1     # L finger is at larger y_a; the rubber extends from the contact face AWAY from the jaw centre
@@ -277,7 +291,7 @@ def mjcf(gap):
         A('        </body>'); A('      </body>')
         orp = P3("or_base_" + s)
         A(f'      <body name="or_{s}" pos="{fmt(orp)}">')
-        A('        ' + inertial("or_" + s, orp)); A(f'        {hinge("or_" + s + "_joint")}'); A(geoms("or_" + s, orp)); A('      </body>')
+        A('        ' + inertial("or_" + s, orp)); A(f'        {hinge("or_" + s + "_joint", LINK_RANGE["or"])}'); A(geoms("or_" + s, orp)); A('      </body>')
     A('    </body>'); A('  </worldbody>')
     A('  <equality>')
     for s in ("L", "R"):
